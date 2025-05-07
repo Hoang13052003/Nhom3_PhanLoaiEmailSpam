@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phân loại Email Spam - Naïve Bayes</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(to right, #83a4d4, #b6fbff);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+      }
+      .container {
+        background-color: white;
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+        max-width: 650px;
+        width: 100%;
+        animation: fadeIn 1s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      h2 {
+        text-align: center;
+        color: #333;
+      }
+      textarea {
+        width: 100%;
+        height: 150px;
+        padding: 10px;
+        font-size: 16px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        resize: none;
+        transition: box-shadow 0.3s;
+      }
+      textarea:focus {
+        box-shadow: 0 0 5px #4caf50;
+        outline: none;
+      }
+      button {
+        margin-top: 15px;
+        padding: 12px 25px;
+        font-size: 16px;
+        border: none;
+        border-radius: 8px;
+        background-color: #4caf50;
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.3s, transform 0.2s;
+      }
+      button:hover {
+        background-color: #45a049;
+        transform: scale(1.05);
+      }
+      .result {
+        margin-top: 20px;
+        font-weight: bold;
+        font-size: 20px;
+        color: #333;
+        text-align: center;
+        background-color: #e0f7fa;
+        padding: 10px;
+        border-radius: 10px;
+      }
+      .spam {
+        color: #d32f2f;
+      }
+      .ham {
+        color: #2e7d32;
+      }
+      .analysis {
+        margin-top: 15px;
+        font-size: 16px;
+        color: #444;
+        line-height: 1.6;
+      }
+      .highlight {
+        font-weight: bold;
+        color: #d32f2f;
+      }
+      .evidence {
+        margin-top: 15px;
+        padding: 12px;
+        background-color: #f4f4f4;
+        border-left: 5px solid #4caf50;
+        border-radius: 8px;
+      }
+      #loading {
+        text-align: center;
+        margin-top: 15px;
+        font-style: italic;
+        display: none;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: center;
+      }
+      th {
+        background-color: #e0f2f1;
+        color: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Phân loại Email (Spam / Không Spam)</h2>
+      <textarea id="emailInput" placeholder="Nhập nội dung email..."></textarea>
+      <button onclick="classifyEmail()">Phân loại</button>
+      <div id="loading">Đang phân tích nội dung email...</div>
+      <div class="result" id="result"></div>
+      <div class="analysis" id="analysis"></div>
+    </div>
+
+    <script>
+      function preprocess(text) {
+        return text
+          .toLowerCase()
+          .replace(/[^a-zA-Z\sÀ-ỹ]/g, "")
+          .split(/\s+/);
+      }
+
+      async function classifyEmail() {
+        const emailText = document.getElementById("emailInput").value;
+
+        if (!emailText.trim()) {
+          document.getElementById("result").innerText =
+            "Vui lòng nhập nội dung email.";
+          return;
+        }
+
+        document.getElementById("loading").style.display = "block";
+        document.getElementById("result").innerText = "";
+        document.getElementById("analysis").innerHTML = "";
+
+        try {
+          const response = await fetch("http://localhost:5000/classify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: emailText }),
+          });
+
+          const data = await response.json();
+
+          document.getElementById("loading").style.display = "none";
+
+          document.getElementById(
+            "result"
+          ).innerHTML = `Kết quả: <span class="${
+            data.result === "Spam" ? "spam" : "ham"
+          }">${data.result}</span>`;
+
+          const wordTable = data.top_words
+            .slice(0, 10)
+            .map(
+              (w) =>
+                `<tr><td>${w.word}</td><td>${w.spam_weight}</td><td>${w.ham_weight}</td><td>${w.difference}</td></tr>`
+            )
+            .join("");
+
+          document.getElementById("analysis").innerHTML = `
+            <div class="evidence">
+              <strong>Phân tích:</strong><br>
+              - Xác suất Spam: <span class="highlight">${data.spam_prob}%</span><br>
+              - Xác suất Không Spam: <span class="highlight">${data.ham_prob}%</span><br>
+            </div>
+            <div class="evidence">
+              <strong>Các từ khóa có ảnh hưởng lớn:</strong><br>
+              <table>
+                <thead>
+                  <tr><th>Từ</th><th>log-spam</th><th>log-ham</th><th>Lệch</th></tr>
+                </thead>
+                <tbody>${wordTable}</tbody>
+              </table>
+            </div>
+            <p>
+              <strong>Lý giải:</strong> Hệ thống sử dụng mô hình Naïve Bayes<br>
+              được huấn luyện trên tập dữ liệu lớn để ước lượng xác suất cho mỗi từ ngữ.<br>
+              Dựa vào xác suất tổng hợp, email này được phân loại là <span class="highlight">${data.result}</span> vì xác suất này cao hơn.
+            </p>
+          `;
+        } catch (error) {
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("result").innerText =
+            "Lỗi: Không thể kết nối đến máy chủ.";
+        }
+      }
+    </script>
+  </body>
+</html>

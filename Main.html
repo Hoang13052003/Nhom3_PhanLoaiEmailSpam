@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phân loại Email Spam - Naive Bayes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .btn-danger {
+            background-color: #e74c3c;
+        }
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+        .btn-success {
+            background-color: #2ecc71;
+        }
+        .btn-success:hover {
+            background-color: #27ae60;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .spam {
+            background-color: #ffecec;
+            border-left: 5px solid #e74c3c;
+        }
+        .ham {
+            background-color: #e8f5e9;
+            border-left: 5px solid #2ecc71;
+        }
+        .progress-container {
+            margin-top: 15px;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #e74c3c;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            transition: width 0.5s;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .stat-box {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .word-cloud {
+            margin-top: 20px;
+            text-align: center;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .word {
+            display: inline-block;
+            margin: 5px;
+            padding: 5px;
+        }
+        .spam-word {
+            color: #e74c3c;
+        }
+        .ham-word {
+            color: #2ecc71;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .samples {
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Phân loại Email Spam với Naive Bayes</h1>
+    
+    <div class="container">
+        <h2>Nhập email cần kiểm tra</h2>
+        
+        <div class="form-group">
+            <label for="emailSubject">Tiêu đề Email:</label>
+            <input type="text" id="emailSubject" placeholder="Nhập tiêu đề email...">
+        </div>
+        
+        <div class="form-group">
+            <label for="emailContent">Nội dung Email:</label>
+            <textarea id="emailContent" placeholder="Nhập nội dung email vào đây..."></textarea>
+        </div>
+        
+        <div>
+            <button onclick="classifyEmail()">Phân loại</button>
+            <button class="btn-danger" onclick="clearInput()">Xóa dữ liệu</button>
+        </div>
+        
+        <div class="samples">
+            <h3>Email mẫu:</h3>
+            <button onclick="loadSampleEmail('ham')">Tải email thường</button>
+            <button onclick="loadSampleEmail('spam')">Tải email spam</button>
+        </div>
+    </div>
+
+    <div id="result" class="result">
+        <h3>Kết quả phân loại:</h3>
+        <p id="classification"></p>
+        <div class="progress-container">
+            <p>Xác suất là spam:</p>
+            <div class="progress-bar">
+                <div id="spamProbability" class="progress" style="width: 0%">0%</div>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-label">Tổng số từ</div>
+                <div id="totalWords" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Từ khóa spam</div>
+                <div id="spamWords" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Từ khóa thường</div>
+                <div id="hamWords" class="stat-value">0</div>
+            </div>
+        </div>
+        
+        <h3>Phân tích từ khóa quan trọng:</h3>
+        <div id="featureTable"></div>
+        
+        <div id="wordCloud" class="word-cloud">
+            <h3>Biểu diễn từ khóa:</h3>
+            <div id="visualWords"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Dữ liệu huấn luyện</h2>
+        <p>Hệ thống phân loại được huấn luyện với một tập dữ liệu mẫu gồm các email thường và email spam.</p>
+        
+        <h3>Email thường (Ham):</h3>
+        <ul id="hamExamples">
+            <li>Xin chào, bạn khỏe không? Hẹn gặp lại vào ngày mai.</li>
+            <li>Báo cáo dự án đã hoàn thành. Vui lòng xem xét và phản hồi.</li>
+            <li>Lịch họp tuần này đã được cập nhật. Kiểm tra lịch của bạn.</li>
+            <li>Cảm ơn bạn đã gửi tài liệu. Tôi sẽ xem xét sớm.</li>
+            <li>Nhắc nhở: Cuộc họp nhóm vào 2 giờ chiều hôm nay.</li>
+        </ul>
+        
+        <h3>Email spam:</h3>
+        <ul id="spamExamples">
+            <li>CHÚC MỪNG! Bạn đã THẮNG 1 TỶ ĐỒNG! Nhấp vào đây để nhận thưởng ngay!</li>
+            <li>Giảm giá 90% cho tất cả sản phẩm! Cơ hội cuối cùng! MUA NGAY!!!</li>
+            <li>Kiếm 100 triệu mỗi tháng làm việc tại nhà! Không cần kinh nghiệm!</li>
+            <li>KHẨN CẤP: Tài khoản của bạn đã bị khóa. Nhấp vào đây để xác minh NGAY LẬP TỨC!</li>
+            <li>BÍ MẬT làm giàu nhanh chóng! Nhấp để biết cách KIẾM TIỀN NHANH CHÓNG và DỄ DÀNG!!!</li>
+        </ul>
+        
+        <div class="form-group">
+            <h3>Thêm dữ liệu huấn luyện mới:</h3>
+            <div>
+                <label>
+                    <input type="radio" name="emailType" value="ham" checked> Email thường (Ham)
+                </label>
+                <label>
+                    <input type="radio" name="emailType" value="spam"> Email spam
+                </label>
+            </div>
+            <textarea id="trainEmailContent" placeholder="Nhập nội dung email huấn luyện..."></textarea>
+            <button class="btn-success" onclick="addTrainingEmail()">Thêm vào tập huấn luyện</button>
+        </div>
+    </div>
+
+    <script>
+        // Dữ liệu huấn luyện
+        const trainingData = {
+            ham: [
+                "Xin chào bạn khỏe không Hẹn gặp lại vào ngày mai",
+                "Báo cáo dự án đã hoàn thành Vui lòng xem xét và phản hồi",
+                "Lịch họp tuần này đã được cập nhật Kiểm tra lịch của bạn",
+                "Cảm ơn bạn đã gửi tài liệu Tôi sẽ xem xét sớm",
+                "Nhắc nhở Cuộc họp nhóm vào 2 giờ chiều hôm nay"
+            ],
+            spam: [
+                "CHÚC MỪNG Bạn đã THẮNG 1 TỶ ĐỒNG Nhấp vào đây để nhận thưởng ngay",
+                "Giảm giá 90 cho tất cả sản phẩm Cơ hội cuối cùng MUA NGAY",
+                "Kiếm 100 triệu mỗi tháng làm việc tại nhà Không cần kinh nghiệm",
+                "KHẨN CẤP Tài khoản của bạn đã bị khóa Nhấp vào đây để xác minh NGAY LẬP TỨC",
+                "BÍ MẬT làm giàu nhanh chóng Nhấp để biết cách KIẾM TIỀN NHANH CHÓNG và DỄ DÀNG"
+            ]
+        };
+
+        // Danh sách từ dừng (stopwords) tiếng Việt
+        const stopwords = ["và", "hoặc", "là", "của", "cho", "trong", "với", "các", "để", "những", "có", "không", "được", "tôi", "bạn", "anh", "chị", "mình", "họ", "nó", "đã", "sẽ", "đang", "một", "từ", "về", "khi", "vì", "theo", "như", "này", "bởi", "tại", "trên", "dưới", "giữa", "nếu", "thì", "nhưng", "mà", "còn", "lại", "nên", "ra", "vào", "đến", "làm", "cũng", "rất", "thể", "đó"];
+        
+        // Mô hình Naive Bayes
+        class NaiveBayes {
+            constructor() {
+                this.wordCounts = {
+                    ham: {},
+                    spam: {}
+                };
+                this.classCounts = {
+                    ham: 0,
+                    spam: 0
+                };
+                this.vocabulary = new Set();
+                this.smoothingFactor = 1; // Laplace smoothing
+            }
+
+            train() {
+                // Đếm số lượng email trong mỗi lớp
+                this.classCounts.ham = trainingData.ham.length;
+                this.classCounts.spam = trainingData.spam.length;
+
+                // Xử lý email thường (ham)
+                trainingData.ham.forEach(email => {
+                    const words = this.tokenize(email);
+                    words.forEach(word => {
+                        this.vocabulary.add(word);
+                        this.wordCounts.ham[word] = (this.wordCounts.ham[word] || 0) + 1;
+                    });
+                });
+
+                // Xử lý email spam
+                trainingData.spam.forEach(email => {
+                    const words = this.tokenize(email);
+                    words.forEach(word => {
+                        this.vocabulary.add(word);
+                        this.wordCounts.spam[word] = (this.wordCounts.spam[word] || 0) + 1;
+                    });
+                });
+            }
+
+            classify(email) {
+                const words = this.tokenize(email);
+                
+                // Tính xác suất cho mỗi lớp
+                const total = this.classCounts.ham + this.classCounts.spam;
+                const priorHam = this.classCounts.ham / total;
+                const priorSpam = this.classCounts.spam / total;
+
+                // Tính xác suất cho mỗi từ trong email
+                let pHam = Math.log(priorHam);
+                let pSpam = Math.log(priorSpam);
+
+                const vocabularySize = this.vocabulary.size;
+                const features = {};
+
+                // Đếm tổng số từ trong mỗi lớp
+                const totalWordsHam = Object.values(this.wordCounts.ham).reduce((a, b) => a + b, 0);
+                const totalWordsSpam = Object.values(this.wordCounts.spam).reduce((a, b) => a + b, 0);
+
+                words.forEach(word => {
+                    // Tính xác suất của từ trong lớp ham với smoothing
+                    const countInHam = this.wordCounts.ham[word] || 0;
+                    const pWordGivenHam = (countInHam + this.smoothingFactor) / (totalWordsHam + this.smoothingFactor * vocabularySize);
+                    
+                    // Tính xác suất của từ trong lớp spam với smoothing
+                    const countInSpam = this.wordCounts.spam[word] || 0;
+                    const pWordGivenSpam = (countInSpam + this.smoothingFactor) / (totalWordsSpam + this.smoothingFactor * vocabularySize);
+
+                    // Cập nhật xác suất tổng
+                    pHam += Math.log(pWordGivenHam);
+                    pSpam += Math.log(pWordGivenSpam);
+
+                    // Lưu thông tin cho việc hiển thị
+                    features[word] = {
+                        ham: pWordGivenHam,
+                        spam: pWordGivenSpam,
+                        countHam: countInHam,
+                        countSpam: countInSpam
+                    };
+                });
+
+                // Chuyển đổi từ logarit về xác suất thông thường
+                const expHam = Math.exp(pHam);
+                const expSpam = Math.exp(pSpam);
+                const sumExp = expHam + expSpam;
+
+                const probHam = expHam / sumExp;
+                const probSpam = expSpam / sumExp;
+
+                // Tính số từ quan trọng
+                let spamWords = 0;
+                let hamWords = 0;
+                
+                Object.keys(features).forEach(word => {
+                    if (features[word].spam > features[word].ham) {
+                        spamWords++;
+                    } else {
+                        hamWords++;
+                    }
+                });
+
+                return {
+                    classification: probSpam > 0.5 ? 'spam' : 'ham',
+                    probSpam: probSpam,
+                    probHam: probHam,
+                    features: features,
+                    totalWords: words.length,
+                    spamWords: spamWords,
+                    hamWords: hamWords
+                };
+            }
+
+            tokenize(text) {
+                // Tiền xử lý: chuyển thành chữ thường, loại bỏ dấu câu và tách từ
+                const tokens = text.toLowerCase()
+                                .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+                                .split(/\s+/)
+                                .filter(word => word.length > 0);
+                
+                // Loại bỏ stopwords
+                return tokens.filter(word => !stopwords.includes(word));
+            }
+
+            // Thêm email vào dữ liệu huấn luyện
+            addTrainingEmail(content, type) {
+                trainingData[type].push(content);
+                // Huấn luyện lại mô hình
+                this.train();
+                
+                // Cập nhật giao diện
+                if (type === 'ham') {
+                    const li = document.createElement('li');
+                    li.textContent = content;
+                    document.getElementById('hamExamples').appendChild(li);
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = content;
+                    document.getElementById('spamExamples').appendChild(li);
+                }
+            }
+        }
+
+        // Tạo và huấn luyện mô hình
+        const naiveBayes = new NaiveBayes();
+        naiveBayes.train();
+
+        // Hàm phân loại email
+        function classifyEmail() {
+            const emailSubject = document.getElementById('emailSubject').value;
+            const emailContent = document.getElementById('emailContent').value;
+            
+            if (!emailContent.trim()) {
+                alert('Vui lòng nhập nội dung email để phân loại!');
+                return;
+            }
+
+            // Kết hợp tiêu đề và nội dung (với trọng số tiêu đề cao hơn)
+            const combinedText = emailSubject + " " + emailSubject + " " + emailContent;
+            const result = naiveBayes.classify(combinedText);
+            
+            // Hiển thị kết quả
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            
+            const spamProbability = Math.round(result.probSpam * 100);
+            
+            const classification = document.getElementById('classification');
+            
+            if (result.classification === 'spam') {
+                classification.textContent = `Email này được phân loại là SPAM với độ tin cậy ${spamProbability}%`;
+                resultDiv.className = 'result spam';
+            } else {
+                classification.textContent = `Email này được phân loại là THƯỜNG (HAM) với độ tin cậy ${Math.round(result.probHam * 100)}%`;
+                resultDiv.className = 'result ham';
+            }
+            
+            // Cập nhật thanh tiến trình
+            const progressBar = document.getElementById('spamProbability');
+            progressBar.style.width = `${spamProbability}%`;
+            progressBar.textContent = `${spamProbability}%`;
+            
+            // Cập nhật thống kê
+            document.getElementById('totalWords').textContent = result.totalWords;
+            document.getElementById('spamWords').textContent = result.spamWords;
+            document.getElementById('hamWords').textContent = result.hamWords;
+            
+            // Tạo bảng phân tích từ
+            const featureTable = document.getElementById('featureTable');
+            
+            // Lấy các từ có ảnh hưởng lớn nhất
+            const words = Object.keys(result.features).sort((a, b) => {
+                const diffA = Math.abs(result.features[a].spam - result.features[a].ham);
+                const diffB = Math.abs(result.features[b].spam - result.features[b].ham);
+                return diffB - diffA;
+            }).slice(0, 10); // Top 10 từ quan trọng
+            
+            let tableHTML = `
+                <table>
+                    <tr>
+                        <th>Từ</th>
+                        <th>P(từ|ham)</th>
+                        <th>P(từ|spam)</th>
+                        <th>Ảnh hưởng</th>
+                    </tr>
+            `;
+            
+            words.forEach(word => {
+                const pWordHam = result.features[word].ham.toFixed(4);
+                const pWordSpam = result.features[word].spam.toFixed(4);
+                const diff = (result.features[word].spam - result.features[word].ham).toFixed(4);
+                const influence = diff > 0 ? 'Có khả năng là spam' : 'Có khả năng là thường';
+                
+                tableHTML += `
+                    <tr>
+                        <td>${word}</td>
+                        <td>${pWordHam}</td>
+                        <td>${pWordSpam}</td>
+                        <td>${influence}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += '</table>';
+            featureTable.innerHTML = tableHTML;
+            
+            // Tạo mây từ
+            const visualWords = document.getElementById('visualWords');
+            let wordCloudHTML = '';
+            
+            words.forEach(word => {
+                const size = Math.max(12, Math.min(32, 12 + Math.abs(result.features[word].spam - result.features[word].ham) * 100));
+                const cssClass = result.features[word].spam > result.features[word].ham ? 'spam-word' : 'ham-word';
+                
+                wordCloudHTML += `<span class="word ${cssClass}" style="font-size: ${size}px">${word}</span>`;
+            });
+            
+            visualWords.innerHTML = wordCloudHTML;
+        }
+
+        // Hàm xóa dữ liệu nhập
+        function clearInput() {
+            document.getElementById('emailSubject').value = '';
+            document.getElementById('emailContent').value = '';
+            document.getElementById('result').style.display = 'none';
+        }
+
+        // Hàm tải mẫu email
+        function loadSampleEmail(type) {
+            if (type === 'ham') {
+                document.getElementById('emailSubject').value = 'Lịch họp tuần này';
+                document.getElementById('emailContent').value = 'Xin chào team,\n\nXin nhắc nhở lịch họp tuần này vào thứ 5 lúc 10:00. Mọi người chuẩn bị báo cáo tiến độ dự án và các vấn đề cần thảo luận.\n\nTrân trọng,\nQuản lý dự án';
+            } else {
+                document.getElementById('emailSubject').value = 'CHÚC MỪNG!!! BẠN ĐÃ TRÚNG THƯỞNG LỚN!!!';
+                document.getElementById('emailContent').value = 'CHÚC MỪNG!!! BẠN ĐÃ TRÚNG GIẢI THƯỞNG TRỊ GIÁ 5 TỶ ĐỒNG!!!\n\nNhấp vào liên kết sau để nhận thưởng NGAY LẬP TỨC: www.nhangiaithuong.com\n\nCƠ HỘI DUY NHẤT!!! KHÔNG NHẬN THƯỞNG TRONG VÒNG 24 GIỜ SẼ MẤT QUYỀN NHẬN THƯỞNG!!!';
+            }
+        }
+
+        // Hàm thêm email vào dữ liệu huấn luyện
+        function addTrainingEmail() {
+            const content = document.getElementById('trainEmailContent').value;
+            if (!content.trim()) {
+                alert('Vui lòng nhập nội dung email huấn luyện!');
+                return;
+            }
+            
+            const type = document.querySelector('input[name="emailType"]:checked').value;
+            naiveBayes.addTrainingEmail(content, type);
+            
+            alert(`Đã thêm email ${type === 'ham' ? 'thường' : 'spam'} vào dữ liệu huấn luyện!`);
+            document.getElementById('trainEmailContent').value = '';
+        }
+    </script>
+</body>
+</html>
